@@ -158,6 +158,18 @@ class LiteRewardCfg:
     hip_yaw_action = RewTerm(func=mdp.hip_yaw_action, weight=-1.0)
     feet_y_distance = RewTerm(func=mdp.feet_y_distance, weight=-2.0)
 
+    # --- BeyondMimic Tracking Rewards ---
+    track_joint_pos = RewTerm(
+        func=mdp.track_joint_pos_exp, 
+        weight=1.5,  # 权重可以根据训练效果微调
+        params={"std": 0.5, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")}
+    )
+    track_joint_vel = RewTerm(
+        func=mdp.track_joint_vel_exp, 
+        weight=0.5,  
+        params={"std": 1.0, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")}
+    )
+
 
 @configclass
 class TienKungWalkFlatEnvCfg:
@@ -301,7 +313,7 @@ class TienKungWalkAgentCfg(RslRlOnPolicyRunnerCfg):
         activation="elu",
     )
     algorithm = RslRlPpoAlgorithmCfg(
-        class_name="AMPPPO",
+        class_name="PPO",
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
@@ -320,7 +332,7 @@ class TienKungWalkAgentCfg(RslRlOnPolicyRunnerCfg):
     )
     clip_actions = None
     save_interval = 100
-    runner_class_name = "AmpOnPolicyRunner"
+    runner_class_name = "OnPolicyRunner"
     experiment_name = "walk"
     run_name = ""
     logger = "tensorboard"
@@ -331,9 +343,12 @@ class TienKungWalkAgentCfg(RslRlOnPolicyRunnerCfg):
     load_checkpoint = "model_.*.pt"
 
     # amp parameter
+    """
     amp_reward_coef = 0.3
     amp_motion_files = ["legged_lab/envs/tienkung/datasets/motion_amp_expert/walk.txt"]
     amp_num_preload_transitions = 200000
     amp_task_reward_lerp = 0.7
     amp_discr_hidden_dims = [1024, 512, 256]
+    """
     min_normalized_std = [0.05] * 20
+    

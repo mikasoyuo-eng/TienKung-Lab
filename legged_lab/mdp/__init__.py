@@ -21,3 +21,5 @@
 from isaaclab.envs.mdp import *
 
 from .rewards import *
+
+from .rewards import track_joint_pos_exp,track_joint_vel_exp

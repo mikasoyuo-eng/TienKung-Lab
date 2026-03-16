@@ -18,7 +18,7 @@
 
 import argparse
 
-from isaaclab.app import AppLauncher
+from isaac_lab.app import AppLauncher
 
 from legged_lab.utils import task_registry
 from rsl_rl.runners import AmpOnPolicyRunner, OnPolicyRunner
@@ -48,8 +48,8 @@ import os
 from datetime import datetime
 
 import torch
-from isaaclab.utils.io import dump_yaml
-from isaaclab_tasks.utils import get_checkpoint_path
+from isaac_lab.utils.io import dump_yaml
+from isaac_lab_tasks.utils import get_checkpoint_path
 
 from legged_lab.envs import *  # noqa:F401, F403
 from legged_lab.utils.cli_args import update_rsl_rl_cfg

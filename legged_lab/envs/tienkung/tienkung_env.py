@@ -118,13 +118,12 @@ class TienKungEnv(VecEnv):
         self.event_manager = EventManager(self.cfg.domain_rand.events, self)
         if "startup" in self.event_manager.available_modes:
             self.event_manager.apply(mode="startup")
-        self.reset(env_ids)
-
         self.amp_loader_display = AMPLoaderDisplay(
             motion_files=self.cfg.amp_motion_files_display, device=self.device, time_between_frames=self.physics_dt
         )
         self.motion_len = self.amp_loader_display.trajectory_num_frames[0]
-
+        self.reset(env_ids)
+    
     def init_buffers(self):
         self.extras = {}
 
@@ -243,7 +242,16 @@ class TienKungEnv(VecEnv):
         self.avg_feet_speed_per_step = torch.zeros(
             self.num_envs, len(self.feet_cfg.body_ids), dtype=torch.float, device=self.device, requires_grad=False
         )
-        self.init_obs_buffer()
+        self.init_obs_buffer()        
+        
+
+        # 在 init_buffers 方法末尾添加
+        #--- 新增：用于 Motion Tracking 的参考状态缓存 ---
+        self.ref_dof_pos = torch.zeros_like(self.robot.data.joint_pos)
+        self.ref_dof_vel = torch.zeros_like(self.robot.data.joint_vel)
+        # 记录每个环境当前追踪的动画时间
+        self.motion_time = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+
 
     def visualize_motion(self, time):
         """
@@ -451,6 +459,10 @@ class TienKungEnv(VecEnv):
         self.action_buffer.reset(env_ids)
         self.episode_length_buf[env_ids] = 0
 
+        self.episode_length_buf[env_ids] = 0
+        # 新增：重置时同步更新一次参考动作
+        self._update_reference_motion()
+
         self.scene.write_data_to_sim()
         self.sim.forward()
 
@@ -486,7 +498,13 @@ class TienKungEnv(VecEnv):
 
         self.episode_length_buf += 1
         self._calculate_gait_para()
+                # 新增：每走一步，更新一次当前应有的目标动作
+        
+        self._update_reference_motion()
 
+
+
+   
         self.command_generator.compute(self.step_dt)
         if "interval" in self.event_manager.available_modes:
             self.event_manager.apply(mode="interval", dt=self.step_dt)
@@ -635,3 +653,72 @@ class TienKungEnv(VecEnv):
         t = self.episode_length_buf * self.step_dt / self.gait_cycle
         self.gait_phase[:, 0] = (t + self.phase_offset[:, 0]) % 1.0
         self.gait_phase[:, 1] = (t + self.phase_offset[:, 1]) % 1.0
+    
+    def track_joint_pos_exp(
+        env, std:float, asset_cfg:SceneEntityCfg = SceneEntityCfg("robot")
+        ) -> torch.Tensor:
+        """
+        [Motion Tracking] 跟踪参考关节位置 (Reference Joint Position)
+        计算当前关节位置与动捕参考位置的 L2 距离，并映射为 0~1 的指数奖励
+        """
+        asset: Articulation = env.scene[asset_cfg.name]
+        # 计算所有关节位置误差的平方和
+        joint_pos_error = torch.sum(
+        torch.square(asset.data.joint_pos[:, asset_cfg.joint_ids] - env.ref_dof_pos[:, asset_cfg.joint_ids]), 
+        dim=1
+        )
+        return torch.exp(-joint_pos_error / std**2)
+
+
+    def track_joint_vel_exp(
+        env, std:float, asset_cfg:SceneEntityCfg = SceneEntityCfg("robot")
+        ) -> torch.Tensor:
+        """
+        [Motion Tracking] 跟踪参考关节速度 (Reference Joint Velocity)
+        """
+        asset: Articulation = env.scene[asset_cfg.name]
+        # 计算所有关节速度误差的平方和
+        joint_vel_error = torch.sum(
+            torch.square(asset.data.joint_vel[:, asset_cfg.joint_ids] - env.ref_dof_vel[:, asset_cfg.joint_ids]), 
+            dim=1
+        )
+        return torch.exp(-joint_vel_error / std**2)
+    
+    def _update_reference_motion(self):
+        """
+        根据当前仿真时间，从动捕数据中提取对应的参考关节位置和速度。
+        用于后续的 Tracking Rewards 计算。
+        """
+        # 更新当前的动画时间 (这里最简单的逻辑是基于 episode_length 直接算时间)
+        # 进阶操作：如果是 Tracking，可以在 reset 时给 motion_time 赋一个随机初始偏差，防止过拟合
+        self.motion_time = self.episode_length_buf * self.step_dt
+
+        # 获取当前时间步的参考帧 (假设你的 amp_loader_display 可以通过时间批量获取)
+        # 如果当前的 loader 不支持批量传入 Tensor 时间，可以使用 for 循环或者稍后我们改造 loader
+        # 以下演示一种通用的提取逻辑：
+        # 1. 极速优化：一次性计算所有时间，并只做一次 CPU-GPU 数据同步！避免 4096 次卡顿！
+        times = (self.motion_time % (self.motion_len * self.physics_dt)).cpu().numpy()
+
+        # 2. 准备一个空列表，用来装 4096 个机器人的动作帧
+        frames_list = []
+
+        # 3. 极速循环：只在 CPU 上循环拿数据，绝对不碰 GPU 赋值
+        for t in times:
+            frame = self.amp_loader_display.get_full_frame_at_time(0, float(t))
+            frames_list.append(frame)
+
+        # 4. 把 4096 个动作帧一次性打包成一个超级矩阵，送回 GPU！
+        frames_tensor = torch.stack(frames_list).to(self.device)
+
+        # 5. 无情的一键并发赋值（速度起飞点就在这里！）
+        # 参考关节位置
+        self.ref_dof_pos[:, self.left_leg_ids] = frames_tensor[:, 6:12]
+        self.ref_dof_pos[:, self.right_leg_ids] = frames_tensor[:, 12:18]
+        self.ref_dof_pos[:, self.left_arm_ids] = frames_tensor[:, 18:22]
+        self.ref_dof_pos[:, self.right_arm_ids] = frames_tensor[:, 22:26]
+
+        # 参考关节速度
+        self.ref_dof_vel[:, self.left_leg_ids] = frames_tensor[:, 32:38]
+        self.ref_dof_vel[:, self.right_leg_ids] = frames_tensor[:, 38:44]
+        self.ref_dof_vel[:, self.left_arm_ids] = frames_tensor[:, 44:48]
+        self.ref_dof_vel[:, self.right_arm_ids] = frames_tensor[:, 48:52]
