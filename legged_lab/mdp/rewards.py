@@ -297,54 +297,35 @@ def gait_feet_frc_support_perio(env: TienKungEnv, delta_t: float = 0.02) -> torc
 import torch
 
 def track_joint_pos_exp(env, std: float, asset_cfg="robot") -> torch.Tensor:
-    """
-    [BeyondMimic 核心] 计算关节位置跟踪的指数奖励。
-    让机器人精准模仿人类参考动作的关节角度。
-    """
-    # 1. 揪出咱们的天工机器人
-    # 兼容不同版本的 IsaacLab 获取 asset 的写法
     if hasattr(asset_cfg, "name"):
         asset = env.scene[asset_cfg.name]
     else:
         asset = env.scene["robot"]
         
-    # 2. 获取天工当前的关节真实位置 (q)
     current_joint_pos = asset.data.joint_pos
 
-    # 3. 获取目标位置 (q_target，也就是人类动捕数据)
-    # 注意：这里假设你在 env 里把动捕数据存成了 ref_joint_pos。
-    if hasattr(env, "ref_joint_pos"):
-        target_joint_pos = env.ref_joint_pos
+    # 🎯 【关键修复】：改成找 env.ref_dof_pos！
+    if hasattr(env, "ref_dof_pos"):
+        target_joint_pos = env.ref_dof_pos
     else:
-        # 如果底层还没来得及加载动捕数据，先用默认的站立姿势兜底，防止代码在这里崩溃
         target_joint_pos = asset.data.default_joint_pos
 
-    # 4. 计算纯数学误差 (L2范数距离的平方)
     error = torch.sum(torch.square(current_joint_pos - target_joint_pos), dim=1)
-
-    # 5. 打分：套上指数函数，std 是你传入的宽容度参数
     return torch.exp(-error / std)
 
-def track_joint_vel_exp(env, std: float, asset_cfg: str = "robot") -> torch.Tensor:
-    """
-    [BeyondMimic 核心] 计算关节速度跟踪的指数奖励。
-    让机器人的关节转动速度也完美契合人类参考动作。
-    """
-    # 获取机器人 asset
-    asset = env.scene[asset_cfg.name]
-    
-    # 1. 获取当前关节真实速度
+def track_joint_vel_exp(env, std: float, asset_cfg="robot") -> torch.Tensor:
+    if hasattr(asset_cfg, "name"):
+        asset = env.scene[asset_cfg.name]
+    else:
+        asset = env.scene["robot"]
+        
     current_joint_vel = asset.data.joint_vel
     
-    # 2. 获取目标关节速度 (假设底层环境里存了 ref_joint_vel)
-    if hasattr(env, "ref_joint_vel"):
-        target_joint_vel = env.ref_joint_vel
+    # 🎯 【关键修复】：改成找 env.ref_dof_vel！并且做形状兜底
+    if hasattr(env, "ref_dof_vel") and env.ref_dof_vel.shape == current_joint_vel.shape:
+        target_joint_vel = env.ref_dof_vel
     else:
-        # 如果还没加载动捕速度数据，先用0速度兜底
         target_joint_vel = torch.zeros_like(current_joint_vel)
         
-    # 3. 计算速度误差平方和
     error = torch.sum(torch.square(current_joint_vel - target_joint_vel), dim=1)
-    
-    # 4. 套上指数函数打分返回
     return torch.exp(-error / std)

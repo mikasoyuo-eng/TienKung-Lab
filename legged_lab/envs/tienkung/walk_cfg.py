@@ -167,13 +167,14 @@ class LiteRewardCfg:
     track_joint_vel = RewTerm(
         func=mdp.track_joint_vel_exp, 
         weight=0.5,  
-        params={"std": 1.0, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")}
+        params={"std": 10.0, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")}
     )
 
 
 @configclass
 class TienKungWalkFlatEnvCfg:
-    amp_motion_files_display = ["legged_lab/envs/tienkung/datasets/motion_visualization/walk.txt"]
+    amp_motion_files_display = ["legged_lab/envs/tienkung/datasets/motion_visualization/walk.txt"]#,"legged_lab/envs/tienkung/datasets/motion_visualization/run.txt"]
+
     device: str = "cuda:0"
     scene: BaseSceneCfg = BaseSceneCfg(
         max_episode_length_s=20.0,
