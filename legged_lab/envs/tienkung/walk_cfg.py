@@ -62,13 +62,13 @@ class GaitCfg:
 
 @configclass
 class LiteRewardCfg:
-    track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=1.0, params={"std": 0.5})
+    track_lin_vel_xy_exp = RewTerm(func=mdp.track_lin_vel_xy_yaw_frame_exp, weight=20.0, params={"std": 0.5})
     track_ang_vel_z_exp = RewTerm(func=mdp.track_ang_vel_z_world_exp, weight=1.0, params={"std": 0.5})
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
+    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    energy = RewTerm(func=mdp.energy, weight=-1e-3)
-    dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    energy = RewTerm(func=mdp.energy, weight=-1e-4)
+    dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-0.5e-6)
+    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
     undesired_contacts = RewTerm(
         func=mdp.undesired_contacts,
         weight=-1.0,
@@ -80,9 +80,9 @@ class LiteRewardCfg:
         },
     )
     body_orientation_l2 = RewTerm(
-        func=mdp.body_orientation_l2, params={"asset_cfg": SceneEntityCfg("robot", body_names="pelvis")}, weight=-2.0
+        func=mdp.body_orientation_l2, params={"asset_cfg": SceneEntityCfg("robot", body_names="pelvis")}, weight=-3.0
     )
-    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.0)
     termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
     feet_slide = RewTerm(
         func=mdp.feet_slide,
@@ -94,7 +94,7 @@ class LiteRewardCfg:
     )
     feet_force = RewTerm(
         func=mdp.body_force,
-        weight=-3e-3,
+        weight=-5e-4,
         params={
             "sensor_cfg": SceneEntityCfg("contact_sensor", body_names="ankle_roll.*"),
             "threshold": 500,
@@ -129,12 +129,12 @@ class LiteRewardCfg:
     )
     joint_deviation_arms = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.2,
+        weight=-0.1,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["shoulder_roll_.*_joint", "shoulder_yaw_.*_joint"])},
     )
     joint_deviation_legs = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.02,
+        weight=-0.1,
         params={
             "asset_cfg": SceneEntityCfg(
                 "robot",
@@ -161,19 +161,19 @@ class LiteRewardCfg:
     # --- BeyondMimic Tracking Rewards ---
     track_joint_pos = RewTerm(
         func=mdp.track_joint_pos_exp, 
-        weight=1.5,  # 权重可以根据训练效果微调
-        params={"std": 0.5, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")}
+        weight=3.0,  # 权重可以根据训练效果微调
+        params={"std": 1.0, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")}
     )
     track_joint_vel = RewTerm(
         func=mdp.track_joint_vel_exp, 
-        weight=0.5,  
-        params={"std": 10.0, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")}
+        weight=0,  
+        params={"std": 3.0, "asset_cfg": SceneEntityCfg("robot", joint_names=".*")}
     )
 
 
 @configclass
 class TienKungWalkFlatEnvCfg:
-    amp_motion_files_display = ["legged_lab/envs/tienkung/datasets/motion_visualization/walk.txt"]#,"legged_lab/envs/tienkung/datasets/motion_visualization/run.txt"]
+    amp_motion_files_display = ["legged_lab/envs/tienkung/datasets/motion_visualization/run.txt"]#["legged_lab/envs/tienkung/datasets/motion_visualization/walk.txt"]
 
     device: str = "cuda:0"
     scene: BaseSceneCfg = BaseSceneCfg(
@@ -227,7 +227,7 @@ class TienKungWalkFlatEnvCfg:
         heading_control_stiffness=0.5,
         debug_vis=True,
         ranges=CommandRangesCfg(
-            lin_vel_x=(-0.6, 1.0), lin_vel_y=(-0.5, 0.5), ang_vel_z=(-1.57, 1.57), heading=(-math.pi, math.pi)
+            lin_vel_x=(2.0, 4.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(0.0, 0.0), heading=(-0.1, 0.1)
         ),
     )
     noise: NoiseCfg = NoiseCfg(
@@ -267,9 +267,9 @@ class TienKungWalkFlatEnvCfg:
                 func=mdp.reset_root_state_uniform,
                 mode="reset",
                 params={
-                    "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+                    "pose_range": {"x": (1.0, 2.0), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
                     "velocity_range": {
-                        "x": (-0.5, 0.5),
+                        "x": (0.0, 0.0),
                         "y": (-0.5, 0.5),
                         "z": (-0.5, 0.5),
                         "roll": (-0.5, 0.5),

@@ -9,3 +9,10 @@ MUJOCO_LOG.TXT
 .history
 *.pt
 *.pth
+_pycache_/
+Exported_policy/
+*.onnx
+*.jit
+.isaac_sim/
+core.*
+.DS_Store
